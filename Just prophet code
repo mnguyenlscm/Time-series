@@ -1,0 +1,220 @@
+---
+title: "Untitled"
+output: html_document
+---
+#read the file and load the package
+
+```{r setup }
+----""
+
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(gridExtra)
+library(fpp2)
+library(prophet)
+
+#Read all files
+datafile <- lapply(Sys.glob("d*.csv"), read.csv)
+plot<-list()
+
+for ( i in c(1:length(datafile))){
+               
+             plot[[i]]<-as.data.frame(datafile[i])%>%
+               ggplot(aes(x=store,y=item))+geom_point() 
+           
+      }
+ marrangeGrob(plot,nrow=length(datafile),ncol=1)
+ 
+ ""
+
+df <- read.csv("https://raw.githubusercontent.com/facebook/prophet/master/examples/example_wp_log_peyton_manning.csv")
+
+#Quick start
+
+m<- prophet(df)
+
+future <- make_future_dataframe(m,periods=365)
+tail(future)
+
+forecast<- predict(m,future)
+tail(forecast[c("ds","yhat","yhat_lower","yhar_upper")])
+
+plot(m,forecast)
+prophet_plot_components(m,forecast)
+
+#Saturating Forecasts
+"Forecasting Growth"
+"Prophet allows us to make forecasts using a logistic growth"
+
+
+df$cap<- 8.5
+
+m<- prophet(df, growth = "logistic")
+future<- make_future_dataframe(m,periods = 1826)
+future$cap <- 8.5
+fcst<- predict(m,future)
+plot(m,fcst)
+
+#Saturating minimum
+
+df$y <- 10- df$y
+df$cap <- 6
+df$floor <- 1.5
+future$cap<-6
+future$floor <-1.5
+m<- prophet(df, growth = "logistic")
+fcst <- predict(m,future)
+plot(m,fcst)
+
+#Trend Changepoints
+
+"Visualize the changepoints"
+plot(m, forecast)+add_changepoints_to_plot(m)
+#Prior scale to change the rate of poit frequency 
+
+m<- prophet(df,changepoint.prior.scale = 0.5)
+forecast<- predict(m,future)
+plot(m,forecast)
+
+"Specifying the locations of the changepoints"
+
+m<- prophet(df, changepoints=c("2012-01-01"))
+forecast<-predict (m,future)
+plot(m,forecast)
+
+"Seasonality, Holiday Effects, And Regressors"
+
+#R
+suppressMessages(library(dplyr))
+playoffs <- data.frame (
+               holiday ="playoff",
+               ds=as.Date(c("2008-01-13","2009-01-03","2010-01-16","2010-01-24","2010-02-07","2011-01-08","2013-01-12","2014-01-12","2014-01-19","2014-02-02","2015-01-11","2016-01-07","2016-01-24","2016-02-07")),lower_window=0,
+               upper_window=1
+)
+superbowls <- data.frame(holiday="superbowl",
+                         ds=as.Date(c("2010-02-07","2014-02-02","2016-02-07")),
+                         lower_window=0,
+                         upper_window=1
+)
+holidays <- bind_rows(playoffs, superbowls)
+
+m<- prophet(df, holidays=holidays)
+
+forecast<- predict(m,future)
+
+forecast %>% select(ds,playoff,superbowl)%>%
+               filter(abs(playoff+superbowl)>0)%>%
+               tail(10)
+plot(m,forecast)+add_changepoints_to_plot(m)
+prophet_plot_components(m,forecast)
+
+"Built in Country Holidays"
+
+m<- prophet(holidays = holidays)
+m<- add_country_holidays(m,country_name="US")
+m<- fit.prophet(m,df)
+
+"Show name of holidays in each country"
+m$train.holiday.names
+
+"Fourier Order for Seasonalities"
+
+"Plot the seasonality component"
+m<- prophet(df)
+prophet:::plot_yearly(m)
+
+"Specifying Custom Seasonalities"
+
+
+m<- prophet(weekly.seasonality = FALSE)
+m <- add_seasonality(m,name="month",period=30.5,fourier.order=5)
+m<- fit.prophet(m,df)
+
+forecast <- predict(m,future)
+prophet_plot_components(m,forecast)
+
+"Seasonalities that depend on other factors"
+
+is_nfl_season <- function(ds){
+               dates <- as.Date(ds)
+               month <- as.numeric(format(dates,"%m"))
+               return(month>8 | month <2)
+               }
+df$on_season <- is_nfl_season(df$ds)
+df$off_season <- !is_nfl_season(df$ds)
+
+#R
+m<- prophet(weekly.seasonality = FALSE)
+m<- add_seasonality(m, name = "weekly_on_season",period=7,fourier.order = 3,condition.name = "on_season")
+m<- add_seasonality(m,name="weekly_off_season",period=7,fourier.order=3, condition.name="off_season")
+m<- fit.prophet(m,df)
+
+future$on_season<- is_nfl_season(future$ds)
+future$off_season<-!is_nfl_season(future$ds)
+forecast<- predict(m,future)
+prophet_plot_components(m,forecast)
+
+# R
+m <- prophet(df, holidays = holidays, holidays.prior.scale = 0.05)
+forecast <- predict(m, future)
+forecast %>% 
+  select(ds, playoff, superbowl) %>% 
+  filter(abs(playoff + superbowl) > 0) %>%
+  tail(10)
+
+
+# R
+m <- prophet()
+m <- add_seasonality(
+  m, name='weekly', period=7, fourier.order=3, prior.scale=0.1)
+
+
+
+# R
+nfl_sunday <- function(ds) {
+  dates <- as.Date(ds)
+  month <- as.numeric(format(dates, '%m'))
+  as.numeric((weekdays(dates) == "Sunday") & (month > 8 | month < 2))
+}
+df$nfl_sunday <- nfl_sunday(df$ds)
+
+m <- prophet()
+m <- add_regressor(m, 'nfl_sunday')
+m <- fit.prophet(m, df)
+
+future$nfl_sunday <- nfl_sunday(future$ds)
+
+forecast <- predict(m, future)
+prophet_plot_components(m, forecast)
+
+"Multiplicative Seasonality"
+
+#By default Prophet fits additive seasonalities, meaning the effect of the seasonality is added to the trend to get the forecast. This time series of the number of air passenggers is an example of when additive seasonalitt does not work:
+
+df<- read.csv()
+m<- prophet(df)
+future <- make_future_dataframe(m,50,freq="m")
+forecast <- predict(m,future)
+plot(m,forecast)
+
+prophet_plot_components (m,forecast)
+
+
+#R
+m<- prophet(seasonality.mode = "multiplicative")
+
+m<- add_seasonality(m, "quarterly", period =91.25, fourier.order=8 , mode="additive")
+
+m<- add_regressor(m,"regressor", mode="additive")
+
+plot_forecast_component(m,forecast)
+
+
+
+
+
+
+
+
+```
