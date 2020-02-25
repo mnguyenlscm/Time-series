@@ -1,1 +1,233 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+               library(tidyverse)
+               library(prophet)
+               library(zoo)
+               library(RColorBrewer)
+               library(gridExtra)
+               library(fpp2)
+               library(stringr)
+               library(lubridate)
+               library(prophet)
+
+theme_set(theme_minimal())
+
+setwd("c:/Users/DellPC/Desktop/demand-forecasting-kernels-only")
+
+#Read datasets
+train <- read.csv("train.csv")
+test<- read.csv("test.csv")
+sample <- read.csv("sample_submission.csv")
+
+summary(train$sales)
+train$Month <- as.yearmon(train$date)
+
+#3 Missing values Detection
+
+colSums(is.na(train))
+
+"calculate the missing data"
+
+#Histogram of Sale Price
+
+ggplot(train, aes(x=sales))+geom_histogram(fill="red",alpha=.9)+
+labs(x=NULL,y=NULL,title="Histogram of Sale Price")+theme_minimal()+theme(plot.title=element_text(vjust=3,size=15))
+
+"Our Sales Price follows Positively Skewed Distribution"
+#Check the Growth &Growth Rate by Date
+
+#4.2 Growth by date
+
+MSP <- aggregate (sales~date, train, mean)
+"Split data into subsets, computes summary statistics for each"
+"Group_by date and then calculate mean for sales of each day"
+
+sl1<- ggplot(MSP, aes(x=as.factor(date),y=sales))+geom_line(color="red",aes(group=1),size=1.5)+geom_point(colour="blue",size=3.5,alpha=0.5)+labs(title="The Growth of Sale Prices by date", x=NULL, y="Sale Price")+
+               theme(plot.title = element_text(vjust=3,size=15))+theme_minimal()
+
+MSP$rate <- c(0,100*diff(MSP$sales)/MSP$sales[-nrow(MSP)])
+
+sl2<- ggplot(MSP,aes(x=as.factor(date),y=rate))+geom_line(color="gray50",aes(group=1),size=1)+labs(title = "Change rate o Sale Price",x="date",y="rate of the change")+geom_hline(yintercept = 0,color="red")+theme(plot.title = element_text(size=15))+theme_minimal()
+
+gridExtra::grid.arrange(sl1,sl2)
+
+"The trend is increasing and season is multiplicative"
+"It is quite indifferent between day and day"
+
+#Test the monthly and yearly
+
+"Monthly"
+
+
+month_train<- train %>%group_by(Month)%>% summarise(sales=mean(sales))
+
+month_train<-month_train%>%mutate(rate=c(0,100*diff(sales)/sales[-nrow(month_train)]))
+
+m1<- month_train %>% ggplot(aes(x=as.Date(Month),y=sales))+geom_line()+geom_point()
+m2<- month_train%>%ggplot(aes(x=as.Date(Month),y=rate))+geom_line(color="red")+geom_hline(yintercept = 0)
+
+year_train<- train %>% mutate(yearly=year(date))%>% group_by(yearly)%>%summarise(sales=mean(sales))
+
+year_train <- year_train %>% mutate(rate=c(0,100*diff(sales)/sales[-nrow(year_train)]))
+
+y1<- year_train%>%ggplot(aes(x=yearly,y=sales))+geom_line()+geom_point()
+y2<- year_train %>% ggplot(aes(x=yearly,y=rate))+geom_line(color="gray50")+geom_hline(yintercept = 0)
+
+gridExtra::grid.arrange(m1,m2,y1,y2,nrow=2)
+
+"Month and year are also frequency and have trend and multiplicative season"
+"Although the daily difference is constant, but the monthly difference is seasonality"
+
+#Comment
+"The Growth of Sales Price is increasing at Yearly level.
+
+2.But there is a change in scenario for Rate of Change of Sales Price by Year.
+
+3.From 2013 to 2014 the rate has monotonically increased, after that there is a drop in rate till 2015.
+
+4.ALthough the rate increased upto 2016, but the highest incre occur in 2014.
+
+5.Therefore we can expect that in 2018 the rate of change of sales will increse if it follows the simililar pattern.
+
+"
+
+#4.5 Growth by Store
+
+unique(train$store)
+train <- train %>% mutate(Year=year(date))
+store_per_y<- aggregate(sales~ store +Year,train, mean)
+
+store_per_y %>% ggplot(aes(x=as.factor(Year),y=sales))+geom_line(aes(group=10))+facet_wrap(.~store)+scale_colour_manual(values = "Sets1")
+
+store_per_y %>%mutate(store=as.factor(store))%>% ggplot(aes(x=as.factor(Year),y=sales,color=store))+geom_line(aes(group=store),lwd=1)+scale_colour_brewer(palette = "Set3")
+
+
+"Therefore there are 10 unique stores(1-10) and the Store-3 has the highest Yearly Growth of Sales whereas Store-7 has the lowest"
+
+#Yearly Growth By Item
+
+unique(train$item)
+item_per_y <- aggregate(sales~item+Year,train,mean)%>% mutate(item= as.factor(item))
+
+
+
+
+#Store 1 Item 1
+
+train %>% filter(store==1, item==1)%>% ggplot(aes(x=sales))+geom_histogram()+scale_x_log10()
+
+train %>% filter(store==1, item==1)%>%select(sales)%>%ts(frequency = 365,start=2013)%>%autoplot()
+
+"Original code to solve "
+
+train_str1_item1 <- train %>%mutate(sales=log1p(sales))%>% filter(store==1, item==1)%>%  group_by(date)%>%summarise(y=(sum(sales)))%>%mutate(ds=date)%>%select(-date)
+
+"Build Holiday effects"
+
+playoffs <- data_frame(
+  holiday = 'playoff',
+  ds = as.Date(c('2013-07-12', '2014-07-12', '2014-07-19',
+                 '2014-07-02', '2015-07-11', '2016-07-17',
+                 '2016-07-24', '2016-07-07','2016-07-24')),
+  lower_window = 0,
+  upper_window = 1
+)
+
+superbowls<- data.frame(
+  holiday = 'superbowl',
+  ds = as.Date(c('2013-01-01', '2013-12-25', '2014-01-01', '2014-12-25','2015-01-01', '2015-12-25','2016-01-01', '2016-12-25',
+                '2017-01-01', '2017-12-25')),
+  lower_window = 0,
+  upper_window = 1
+)
+holidays <- bind_rows(playoffs, superbowls)
+
+
+"There is frame to add holiday in above"
+
+model_prophet<- prophet(train_str1_item1,daily.seasonality = TRUE)
+
+future<-make_future_dataframe(model_prophet,period=30)
+forecast<- predict(model_prophet,future)
+
+plot(model_prophet,forecast)+add_changepoints_to_plot(model_prophet)
+prophet_plot_components(model_prophet,forecast)
+
+nfl_sunday<- function(ds){
+               ifelse(wday(as.Date(ds),abbr = TRUE,label=TRUE)=="Sun" & (month(ds)>8 | month(ds)<2),1,0)
+}
+
+train_str1_item1$nfl_sunday <- nfl_sunday(train_str1_item1$ds)
+
+model_prophet<- prophet()
+model_prophet<- add_regressor(model_prophet,"nfl_sunday")
+model_prophet<- add_seasonality(model_prophet,name = "daily",fourier.order = 5,period = 60)
+model_prophet<- prophet(train_str1_item1,holidays.prior.scale = 0.5, holidays=holidays, yearly.seasonality = 4, interval.width = 0.95, daily.seasonality = TRUE, changepoint.prior.scale = 0.006)
+
+future <- make_future_dataframe(model_prophet,periods=90,freq = "days")
+
+forecast <- predict(model_prophet,future)
+
+plot(model_prophet,forecast)+add_changepoints_to_plot(model_prophet)
+
+prophet_plot_components(model_prophet,forecast)
+
+
+
+smape_cal <- function(traindata, predict){
+               
+               traindata <- as.numeric(traindata)
+               predict<- as.numeric(predict)
+               
+               smape <- 2*abs(traindata-predict)/(abs(traindata)+abs(predict))
+
+               return(smape)
+}
+
+
+
+
+train_str1_item1_error<- train_str1_item1%>%select(-nfl_sunday)%>%mutate(ds=as.Date(ds))
+
+forecast<- predict(model_prophet,future)%>% mutate(ds=as.Date(ds))%>%select(ds,yhat)
+
+data_cal_error <- left_join(train_str1_item1_error,forecast,by="ds")%>%mutate(traindata=y,predict=yhat)
+
+smape_error<- smape_cal(data_cal_error$traindata,data_cal_error$predict)
+
+mean_smape_error<-mean(smape_error)
+
+"6.22% for the total predict"
+
+"Neural Network "
+
+               train_str1_item1_ts<-train_str1_item1%>%select(y)%>% ts(frequency =365, start=2013 )
+               
+               autoplot(train_str1_item1_ts)
+               
+               fit<- nnetar(train_str1_item1_ts)
+               
+               
+               autoplot(forecast(fit,h=30))
+               
+               fcast<-forecast(fit,PI=TRUE)
+               
+               autoplot(fcast)
+
+
+```
+
+
+                                                                                                               
+
+
+
+
+
+
 
