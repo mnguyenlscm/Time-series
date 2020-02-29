@@ -1,0 +1,281 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+"In this competition, we are asked to predict the next 3 months sales for each of the stores using the daily data for last 4 years. The notebook is broken down into 3 sections"
+
+#Section 1
+
+"Exploratory data analysis"
+
+#Section 2
+
+" Forecasting models such as ETS, Holt WInters and Arima have been inspired by the work done Rob J Hyndman and Geogre Athanasopoulos"
+
+#Section 3
+
+"The random forest model has been used"
+
+#Section 4
+
+"The prophet model was inspired by other kernels"
+
+"Here are some packages that we need to load"
+
+load.libraries <- c("plyr", "dplyr", "data.table","readxl", "reshape2", "stringr", "ggplot2", "tidyverse", "gridExtra", "matrixStats", " lubridate", "corrplot", "e1071", "xgboost","caret","zoo","factoextra","plotly","DT","forecast","fpp2","prophet", "titoc")
+
+#Section 1:
+
+#Choose the sample
+
+setwd("c:/Users/DellPC/Desktop/demand-forecasting-kernels-only")
+
+"Read file"
+
+train<- read.csv("train.csv")
+test<-read.csv("test.csv")
+sample<-read.csv("sample.csv")
+
+train_sample <- train %>% filter(store==2,item ==1)
+
+inds <- seq(min(as.Date(train_sample$date)),max(as.Date(train_sample$date)),by="day")
+
+#Create a time series object
+set.seed(25)
+
+myts<- ts(train_sample[,"sales"],
+          start=c(2013,1),
+          frequency=365)
+
+#EDA
+"Using the fpp2 package, I would be using some functions to lookat the trend visually. The first step would be to visualize the plot since it would help vto visualizemany features of the data such as trend, seasonality, cyclicity and unusual observations"
+
+#To see the time series plot
+autoplot(myts)
+
+#To see the seasonality pattern 
+ggseasonplot(myts)
+
+"It is hard to infer any seasonality by day, but there is definitely an increase towards the middle of the season and a decrease towards the end of the season"
+
+#To see the seasonal plot with polar circle
+ggseasonplot(myts, polar=T)
+
+"Lets simplify these plots by making them start from a specific year (lets look at the most recent years since those should be ones driving the forecast"
+
+myts_sample<-window(myts,start=2016)
+ggseasonplot(myts_sample)
+ggseasonplot(myts_sample,polar=T)
+
+#Lag Plot and ACF (Auto Correlation Function)
+
+"Another way to look at plots is by using a lag plot and the correlation between those points"
+gglagplot(myts)
+ggAcf(myts)
+
+"Lets look at the last plot which is the auto correlation plot. Before we dive into the auto correlation plot, lets learn what i means. Autocorrelation, also know as serial correlation, is the correlation of a signal with a delayed copy of itself as a function of delay. Informally, it is the similarity between observations as a function of the time lag between them."
+
+#Section 2: Forecasting Models
+
+#Naive Forecast
+
+"The very simplest forecasing method is to use the most recent observation; this is called a naive forecast and can be implemented in a namsake function. FOr seasonal data, a related idea is to use the corresponding season from the last year of data. This is called as the seasonal naive"
+
+"Using the naive function, we can  see the most recent point has been used to forecast"
+
+fcnv<- naive(myts,h=90)
+autoplot(fcnv)
+
+
+"The seasonal naive method accounts for seasonality by setting each prediction to be equal to last observed value of the same season. FOr example, the prediction value for all subsequent months of April will be equal to the previous observed value for April. The seasonal naive method is particularly useful data that has a very high level of seasonality"
+
+fcsnv <- snaive(myts, h=90)
+autoplot(fcsnv)
+
+#Simple Exponential Smoothing
+
+"Exponential smoothing of tim series data ssigns exponentially decreasing weights for newest to oldest observations. In other words, the older the data, the less priority (weight) the data is given, newest data is seen as more relevant and is assigned weight"
+
+"The following are the factors that go into the simple exponential smoothing function"
+
+#1 h being the number of periods for forecasting
+#2 alpha being the level smoothing parameter
+#3 initial being the method for selecting initial state values
+
+fcses<-ses(myts,h=90)
+autoplot(fcses)
+
+#Residuals
+
+"Before we dive into the concept of residuals, lets bring up a concept called as white noise. Time series that are random (such as stock prices) are considered to be white noise. In other words, time series that show no autocorrelation are also white noise. There are a couple of ways to figure out if the time series is white noise or not from checkresidual function"
+
+#1 The time series should be uncorrelated(i.e in the ACF the vertical lines should be below the blue dotted line)
+#2 The residuals should have a mean of zero (Ljung-Box test should have a p-value greater than 0.05)
+#3 The distribution of the residuals should be normal
+
+"Let's check the residual for each of the 2 types of forecast. We can see that for each of the forecast, the p-value is less than 0.05 and the ACF has verticial lines greater than the blue line threshold. This implies that the trend is not whitenoise"
+
+checkresiduals(fcses)
+
+#Residual Results
+
+"The result on the top shows that since the p=value is less than 0.05, we can reject the null hypothesis which is that the autocorrelations (for the choén lags) in the population from which the sample is taken are all zero. The ACF plot also have vertical lines that are above the blue threshold. This provides evidence that the time series is not white noise"
+
+#Training and Test set
+
+"Lets create a training and test set. The test would be the last 365 days and the training set would be the rest of the remaining time series. The purpose is to check which model (SES or Seasonal Naive) forecast have the lowest RMSE (Root Mean Squared Error) in the test set."
+
+"Running the simple exponential smoothing with the accuracy summary"
+
+#Create a training set
+train<- window(myts,start=2013,end=2017)
+
+#Compute SES and naive forecasts, save to fcses and fcnaive
+
+fcses <- ses(train, h=365)
+fcsnaive<- snaive(train, h=365)
+
+#Calculateforecast accuracy measures
+accuracy(fcses,myts)
+
+"Note that it just compares the difference of forecast errors"
+
+#Calculate the Seasonal Snaive Forecasting With Accuracy Summary
+accuracy(fcsnaive,myts)
+
+"Frome the above result, the snaive forecasthas a lowest RMSE as compared to the simple exponential smoothing one in the test set but a higher one in the training set"
+
+#Holt Winters
+
+"Exponential smoothing does not take into account the seasonality but triple exponential smoothing (also known as Holt WInters) can be used. The idea is to apply exponential smoothing to the seasonal components in addtion to level and trend"
+
+fcholt <- holt(myts, h =90)
+autoplot(fcholt)
+
+checkresiduals(fcholt)
+
+#Additive vs Multiplicative
+
+"Another thing to know about trend is that instead of subtracting y(x-1) from y(x), we could divide one by the other thereby getting a ratio. The difference between these 2 approaches is similar to how we can say that something costs $20 more or 5% more. The variant of the method based on subtraction is known asadditive, while the one based on divisionis known as multiplicative"
+
+
+#Adding seasonality
+
+"In the above, holt winters function we noticed that seasonality was not taken into account. As such the forecast was pretty much a straight line. When we force, the seasonality using the seasonal=multiplicative function"
+
+fchws<- hw(myts,seasonal="multiplicative",h=90)
+
+# Error in ets(x, "MAM", alpha = alpha, beta = beta, gamma = gamma, phi = phi, : Frequency too high
+
+#ETS models
+
+fcets<- stlf(myts)
+autoplot(forecast(fcets))
+
+"Check residual"
+
+checkresiduals(fcets)
+
+
+#Arima models
+
+fcarima<-auto.arima(myts)
+fcarima%>% forecast(h=90) %>% autoplot()
+
+checkresiduals(fcarima)
+
+"Compute errors for both ets and arima model"
+fcets <- function(x,h){
+               forecast(ets(x),h=h)
+}
+
+fcarima<- function (x,h){
+               forecast(auto.arima(x),h=h)
+}
+
+"Using the cross validation"
+
+#Compute CV errors for ETS as e1
+e1<- tsCV(myts,fcets,h=1)
+
+# Compute CV errors for snaive as e2
+e2 <- tsCV(myts, snaive, h = 1)
+
+#Compute CV errors for arima model as e3
+e3<- tsCV(myts,fcarima,h=1)
+
+# Find MSE of each model class
+mean(e1^2, na.rm = TRUE)
+mean(e2^2, na.rm = TRUE)
+mean(e3^2,na.rm=TRUE)
+
+#Dynamic Harmonic Regression
+"This regression is particularly useful for daily and weekly data. The only parameter which needs to be set is the value of K. The higher the value of K, the higher the seasonal pattern the forecast would be"
+
+#Set up harmonic regressors of order 13
+harmonics <- fourier(myts, K=2)
+
+#Fit regression model with ARIMA errors
+fit<- auto.arima(myts, xreg=harmonics, seasonal=FALSE)
+
+#Forecasts next 3 years
+newharmonics<- fourier(myts, K=2, h=90)
+fc<- forecast(fit, xreg=newharmonics)
+
+#Plot forecast fc
+autoplot(fc)
+
+#TBATS model
+fit <- tbats(myts)
+fc<- forecast(fit,h=90)
+autoplot(fc)
+
+#Section 3
+
+#Prophet model
+"The prophet model has been inspired by the following kernel"
+
+stats <- data.frame(y=log1p(train_sample$sales),ds=train_sample$date)
+
+stats<- stats %>% group_by(ds)%>%summarise(y=sum(y))
+head(stats)
+
+colnames(stats)<-c("ds","y")
+
+model_prophet<- prophet(stats)
+summary(model_prophet)
+
+future<- make_future_dataframe(model_prophet, periods = 90)
+forecast<- predict(model_prophet, future)
+plot(model_prophet, forecast)
+
+#Cross Validation
+"One of the techniques used to cross validate a time series model is by using sliding window and then figuring out the statistics of the mape. Right now the cross validation is only for one store and one item"
+
+smape_cal<- function(train_value, forecast_value){
+               train_value <- as.numeric(train_value)
+               forecast_value<- as.numeric(forecast_value)
+               
+               smape<-function(train_value,forecast_value){ (abs(train_value-forecast_value))/(train_value+forecast_value)/2
+               return(smape)
+}
+
+forecast<- forecast%>%mutate(ds=as.Date(ds))
+stats<- stats %>% mutate(ds=as.Date(ds))
+
+d<- left_join(stats,forecast,by="ds")%>% select(yhat,y)%>%mutate(train_value=y,forecast_value=yhat)
+
+a<-smape_cal(d$y,d$yhat)
+
+
+
+```
+
+
+
+
+
+
