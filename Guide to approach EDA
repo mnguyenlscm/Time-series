@@ -1,5 +1,7 @@
 #EDA
 
+#Content
+
 Date vs Sales
 Month vs Sales
 Weekday vs Sales
@@ -9,3 +11,67 @@ Average Sales for each Store
 Average Sales for each item
 Boxplot of Sales for Each item
 Date vs Sales (seperate for each item)
+
+#Code
+
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+#Load packages
+suppressMessages(library(tidyverse))
+suppressMessages(library(lubridate))
+suppressMessages(library(zoo))
+suppressMessages(library(viridis))
+suppressMessages(library(RColorBrewer))
+
+theme_set(theme_minimal())
+
+setwd("c:/Users/DellPC/Desktop/demand-forecasting-kernels-only")
+
+#Read datasets
+train <- read.csv("train.csv")
+test<- read.csv("test.csv")
+sample <- read.csv("sample.csv")
+
+#Date vs Sales
+
+train%>%mutate(date=as.Date(date))%>%group_by(date)%>%summarise(sales=sum(sales))%>% ggplot(aes(x=date,y=sales))+geom_line(aes(group=1))+scale_x_date(date_labels = "%b %Y",date_breaks = "3 months")
+
+train%>%mutate(date=as.Date(date))%>%mutate(year_month= as.Date(as.yearmon(date)))%>%group_by(year_month)%>%summarise(sales=sum(sales))%>% ggplot(aes(x=year_month,y=sales))+geom_line(aes(group=1))+scale_x_date(date_labels = " %Y",date_breaks = "3 months")
+
+
+#Month_Aggregate
+train%>% mutate(date=as.Date(date))%>% mutate(month=month(as.Date(date,abbr = TRUE,label=TRUE)))%>%group_by(month)%>%summarise(sales=sum(sales))%>%ggplot(aes(x=month,y=sales))+geom_line(aes(group=1))
+
+#Weekday vs Sales
+train%>% mutate(weekday=wday(date,label = TRUE,abbr=TRUE))%>%group_by(weekday)%>%summarise(sales=sum(sales))%>% ggplot(aes(x=weekday,y=sales))+geom_line(aes(group=1))
+
+#Date vs Sales (Separated by store number)
+train%>% mutate(store=as.factor(store))%>%group_by(store,date)%>%summarise(sales=sum(sales))%>%ggplot(aes(x=date,y=sales,colours))+geom_line(aes(group=10,colour=store,lwd=1,alpha=0.6))+scale_colour_viridis(discrete=TRUE,option = "D")
+
+"Option for the above plot"
+#+ scale_color_manual(values=c("red","blue","green","yellow","orange","black","pink","gray","brown","#000066"))
+
+#Boxplot for Sales for Each Store
+
+train%>%mutate(store=as.factor(store))%>%ggplot(aes(x=fct_reorder(store,sales,.fun = mean),y=sales,fill=store))+geom_boxplot(aes(group=store))+scale_colour_viridis(discrete=TRUE,option="D")
+
+#Average Sales for each Store
+train %>% group_by(store)%>% summarise(sales=mean(sales))%>%ggplot(aes(x=fct_reorder(as.factor(store),sales),y=sales,fill=store))+geom_col()+scale_fill_viridis(option = "cividis")+xlab("Store")+ylab("Sales")
+
+#Averagge Sales for each Item
+train %>% group_by(item)%>% summarise(sales=mean(sales))%>%ggplot(aes(x=fct_reorder(as.factor(item),sales),y=sales,fill=item))+geom_col()+scale_fill_viridis(option = "cividis")+xlab("Store")+ylab("Sales")
+
+#Boxplot of Sales For Each Item
+train%>%mutate(item=as.factor(item))%>%ggplot(aes(x=fct_reorder(item,sales,.fun = mean),y=sales,fill=item))+geom_boxplot(aes(group=item))+scale_colour_viridis(discrete=TRUE,option="D")
+
+#Date vs Sale (Seperated for each item)
+train%>%mutate(item=as.factor(item))%>% group_by(date,item)%>%summarise(sales=sum(sales))%>%ggplot(aes(x=date,y=sales))+geom_line(aes(group=item,color=item))+facet_wrap(~item)+scale_colour_viridis(discrete = TRUE, option="D")
+
+
+
+```
