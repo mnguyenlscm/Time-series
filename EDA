@@ -20,7 +20,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-
+knitr::opts_chunk$set(message = TRUE)
 #Load packages
 suppressMessages(library(tidyverse))
 suppressMessages(library(lubridate))
@@ -76,8 +76,10 @@ dt<-train%>%group_by(item)%>%summarise(sales=sum(sales))
 avg<-as.numeric(mean(dt$sales))
 median<-as.numeric(median(dt$sales))
 
-train%>%mutate(item=as.factor(item))%>% group_by(date,item)%>%summarise(sales=sum(sales))%>%ggplot(aes(x=date,y=sales,color=item))+geom_point()+geom_hline(yintercept =avg)+geom_hline(yintercept = median)+facet_wrap(~item)+scale_colour_viridis(discrete = TRUE, option="D")+labs(title = "Date vs Sale Seperated for each item",xlab="Date",ylab="Sales")
+train%>%mutate(item=as.factor(item))%>% group_by(date,item)%>%summarise(sales=sum(sales))%>%ggplot(aes(x=date,y=sales,color=item))+geom_point()+facet_wrap(~item)+scale_colour_viridis(discrete = TRUE, option="D")+labs(title = "Date vs Sale Seperated for each item",xlab="Date",ylab="Sales")
 
 
+
+```
 
 ```
