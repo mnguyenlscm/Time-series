@@ -1,0 +1,59 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressMessages(library(tidyverse))
+
+
+setwd("C:/Users/DellPC/Desktop/r2_nhap")
+
+#read dts
+
+R2_CustomerMaster<-read.csv("R2_CustomerMaster.csv")
+R2_InboundTransportRate<- read.csv("R2_InboundTransportRate.csv")
+R2_Initial_Inventories<- read.csv("R2_Initial_Inventories.csv")
+R2_OutboundTransportRate<-read.csv("R2_OutboundTransportRate.csv")
+R2_POLine<- read.csv("R2_POLine.csv")
+R2_ProductMaster<-read.csv("R2_ProductMaster.csv")
+R2_Projected_CoverageDay_By_Class<-read.csv("R2_Projected_CoverageDay_By_Class.csv")
+R2_Projected_SL_By_Segmentation<-read.csv("R2_Projected_SL_By_Segmentation.csv")
+R2_ROLine<-read.csv("R2_ROLine.csv")
+R2_SOLine<-read.csv("R2_SOLine.csv")
+R2_StorageCost<-read.csv("R2_StorageCost.csv")
+R2_TOLine<-read.csv("R2_TOLine.csv")
+
+#process data
+
+PO_sort<- R2_POLine%>%filter(PoProductId=="SKU01"| PoProductId=="SKU02" | PoProductId=="SKU03")
+RO_sort<-R2_ROLine%>%filter(RoProductId=="SKU01"| RoProductId=="SKU02" | RoProductId=="SKU03")
+
+RO_PO_sort<- left_join(RO_sort,PO_sort,by="PoOrderLineId")%>%select("RoSupplierId","RoProductId","PoEnteredDate","RoSupplierQty" ,"RoArrivalDate","PoUnitCost")
+
+TO_sort<-R2_TOLine%>%filter(ToProductId=="SKU01"| ToProductId=="SKU02" | ToProductId=="SKU03")%>%select("ToDepartureDate","ToArrivalDate","ToQuantity","ToCustomerId","ToProductId")
+
+IB_sort<- R2_InboundTransportRate%>%filter(SupplierId !="SU04")
+
+TO_sort_2<-TO_sort%>%group_by(ToCustomerId)%>%count()
+
+OB_sort<- inner_join(TO_sort_2,R2_OutboundTransportRate,by=c("ToCustomerId"="CustomerId"))%>%select(ToCustomerId,TransportUnitCost,Unit)
+
+Product_sort<- R2_ProductMaster%>%filter(ProductId=="SKU01"| ProductId=="SKU02" | ProductId=="SKU03")%>%select("ProductId", "KgPerCarton","SupplierUnit","KgPerPallet","CartonsPerPallet")
+
+Initial_sort<- R2_Initial_Inventories%>%filter(ProductId=="SKU01"| ProductId=="SKU02" | ProductId=="SKU03")
+
+Storage_sort<- R2_StorageCost%>%filter(ProductId=="SKU01"| ProductId=="SKU02" | ProductId=="SKU03")
+
+write.csv(OB_sort,file="OB_sort.csv")
+
+
+
+
+
+
+
+```
+
