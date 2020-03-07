@@ -1,0 +1,67 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+```{r setup, include=FALSE, echo=FALSE}
+
+#Read data set
+
+setwd("C:/Users/DellPC/Desktop/uber")
+
+"New York Long"
+
+data.file<- list()
+
+data.file<- lapply(Sys.glob("uber*.csv"),read.csv)
+
+suppressMessages(library(tidyverse))
+suppressMessages(library(lubridate))
+suppressMessages(library(DT))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(viridis))
+suppressMessages(library(ggsci))
+suppressMessages(library(wesanderson))
+suppressMessages(library(DT))
+
+dt1<- as.data.frame(data.file[1])
+dt2<- as.data.frame(data.file[2])
+dt3<- as.data.frame(data.file[3])
+dt4<- as.data.frame(data.file[4])
+dt5<- as.data.frame(data.file[5])
+dt6<- as.data.frame(data.file[6])
+
+uber_dt<- full_join(dt1,dt2)
+uber_dt<-full_join(uber_dt,dt3)
+uber_dt<-full_join(uber_dt,dt4)
+uber_dt<-full_join(uber_dt,dt5)
+uber_dt<-full_join(uber_dt,dt6)
+
+colors = c("#CC1011", "#665555", "#05a399", "#cfcaca", "#f5e840", "#0683c9", "#e075b0")
+
+#Load package
+
+uber_dt<- uber_dt%>%mutate(Date.Time1=as.POSIXct(Date.Time,format= "%m/%d/%Y %H:%M:%S"),
+Time=format(as.POSIXct(Date.Time,format= "%m/%d/%Y %H:%M:%S"),format= "%H:%M:%S"))
+
+
+uber_dt$weekday<- factor(wday(uber_dt$Date.Time1,abbr=TRUE,label = TRUE))
+uber_dt$month<- factor(month(uber_dt$Date.Time1,abbr = TRUE,label = TRUE))
+uber_dt$day<- factor(day(uber_dt$Date.Time1))
+uber_dt$year<- factor(year(uber_dt$Date.Time1))
+uber_dt$hour<-factor(hour(uber_dt$Date.Time1))
+uber_dt$minute<-factor(minute(uber_dt$Date.Time1))
+uber_dt$second<-factor(second(uber_dt$Date.Time1))
+
+##Visualize hour pattern
+uber_dt %>% group_by(hour)%>% summarise(Total=n()) %>%ggplot(aes(x=hour,y=Total))+geom_bar(stat = "identity",aes(fill=hour,alpha=0.6))+ggtitle("Hour from trip")
+
+uber_dt%>%group_by(hour,month)%>%summarise(Total=n())%>%ggplot(aes(x=hour,y=Total,fill=month))+geom_bar(stat = "identity")+scale_fill_viridis(discrete=TRUE,option="magma")
+
+
+
+uber_dt%>%ggplot(aes(x=Lon,y=Lat,color=Base))+geom_point()+xlim(c(min(uber_dt$Lon),max(uber_dt$Lon)))+ylim(c(min(uber_dt$Lat),max(uber_dt$Lat)))+ggsci::scale_color_aaas()
+
+
+```
