@@ -1,0 +1,129 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+#Load packages
+suppressMessages(library(tidyverse))
+suppressMessages(library(purrr))
+suppressMessages(library(psych))
+suppressMessages(library(table1))
+suppressMessages(library(DT))
+suppressMessages(library(explore))
+suppressMessages(library(gridExtra))
+
+theme_set(theme_minimal())
+
+setwd("C:/Users/DellPC/Desktop/cus_seg")
+
+#Read dataset
+cus_seg<- read.csv("cus_seg.csv")
+
+#Explore the datasets
+
+"Just some of physical interactive"
+psych::describeBy(cus_seg,group="gender")
+
+datatable(cus_seg)
+explore::explore(cus_seg, target = "gender")
+
+
+##Visualize the datasets
+
+getmode <- function(x) {
+   uniq <- unique(x)
+   uniq[which.max(tabulate(match(x, uniq)))]
+}
+
+mode_age <- getmode(cus_seg$age)
+mode_annual_income<- getmode(cus_seg$annual_income)
+mode_spending<- getmode(cus_seg$spending)
+
+s1<- cus_seg%>% ggplot(aes(x=age, y =..density..))+geom_histogram(bins=40,fill="steelblue",color="red")+geom_density(alpha=0.5,color="black",fill="green",lwd=1)+geom_vline(xintercept = mode_age,color="red",lwd=1)
+
+s2<- cus_seg%>% ggplot(aes(x=annual_income, y =..density..))+geom_histogram(bins=40,fill="steelblue",color="red")+geom_density(alpha=0.5,color="black",fill="green",lwd=1)+geom_vline(xintercept = mode_annual_income,color="red",lwd=1)
+
+s3<- cus_seg%>% ggplot(aes(x=spending, y =..density..))+geom_histogram(bins=40,fill="steelblue",color="red")+geom_density(alpha=0.5,color="black",fill="green",lwd=1)+geom_vline(xintercept = mode_spending,color="red",lwd=1)
+
+gridExtra::grid.arrange(s1,s2,s3,ncol=1)
+
+#Elbow Method
+suppressMessages(library(purrr))
+set.seed(3)
+
+iss<- function(k){
+               kmeans(cus_seg[,3:5],k, iter.max = 100, nstart = 100, algorithm = "Lloyd")$tot.withinss
+}
+
+k<- c(1:10)
+iss_value<- map(k,iss)
+a<- data.frame(k,iss_value)
+a%>%ggplot(aes(x=k,y=as.numeric(iss_value)))+geom_point()+geom_line()
+
+#Average Silhouette Method
+
+suppressMessages(library(gridExtra))
+suppressMessages(library(grid))
+suppressMessages(library(cluster))
+suppressMessages(library(NbClust))
+suppressMessages(library(factoextra))
+
+
+k2<- kmeans(cus_seg[,3:5],2,iter.max = 100,algorithm = "Lloyd", nstart = 100)
+plot(silhouette(k2$cluster,dist(cus_seg[,3:5],"euclidean")))
+
+factoextra::fviz_nbclust(cus_seg[,3:5],kmeans,method="silhouette")
+
+#Gap Statistic Method
+
+set.seed(100)
+stat_gap<-clusGap(cus_seg[,3:5],K.max = 10,B=50, nstart=25, FUN=kmeans)
+
+fviz_gap_stat(stat_gap)
+
+"Fit in K-neart network with K=6"
+
+k6<- kmeans(cus_seg[,3:5],6,iter.max = 100,nstart = 100,algorithm = "Lloyd")
+
+"Principal Component Analysis"
+pcclust<- prcomp(cus_seg[,3:5],scale=FALSE)
+
+#Age vs Annual_income
+cus_seg<-cus_seg%>%mutate(type=as.factor(k6$cluster))
+
+s4<-cus_seg%>%ggplot(aes(x=age,y=annual_income))+geom_point(aes(color=as.factor(type),size=2))+ggsci::scale_color_tron()+geom_vline(xintercept = mode_age,color="red")+geom_hline(yintercept = mode_annual_income,color="gray")
+
+s5<-cus_seg%>%ggplot(aes(x=annual_income,y=spending))+geom_point(aes(color=as.factor(type),size=2))+ggsci::scale_color_tron()+geom_vline(xintercept = mode_annual_income,color="red")+geom_hline(yintercept = mode_spending,color="gray")+geom_density2d()
+
+gridExtra::grid.arrange(s4,s5,ncol=1)
+
+
+"Draw the 3D plot"
+suppressMessages(library(gg3D))
+suppressMessages(library(plotly))
+suppressMessages(library(RColorBrewer))
+suppressMessages(library(viridis))
+suppressMessages(library(caret))
+suppressMessages(library(Amelia))
+
+
+cus_seg%>%ggplot(aes(x=age,y=annual_income,z=spending,color=type))+geom_point()+axes_3D()+stat_3D()+scale_color_viridis(discrete = TRUE,option = "A")
+
+#Use hex plot
+cus_seg%>%ggplot(aes(x=annual_income,y=spending))+geom_hex()+scale_fill_gradientn(colours=topo.colors(6,alpha=0.8))
+
+cus_seg%>%ggplot(aes(x=annual_income,y=spending))+geom_density2d()
+
+
+cus_seg%>%ggplot(aes(x=annual_income,y=spending,color=type))+geom_density2d(lwd=1)+geom_point(size=3)
+
+
+
+
+
+
+```
