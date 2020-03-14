@@ -1,0 +1,237 @@
+#Working directory
+setwd("C:/Users/DellPC/Desktop/r2_nhap/input")
+
+#Load datasets
+data.file<-list()
+data.file<-lapply(Sys.glob("*.csv"),read.csv)
+
+OB_sort<-as.data.frame(data.file[1])
+R2_CustomerMaster<-as.data.frame(data.file[2])
+R2_InboundTransportRate<-as.data.frame(data.file[3])
+R2_Initial_Inventories<-as.data.frame(data.file[4])
+R2_OutboundTransportRate<-as.data.frame(data.file[5])
+R2_POLine<-as.data.frame(data.file[6])
+R2_ProductMaster<-as.data.frame(data.file[7])
+R2_Projected_CoverageDay_By_Class<-as.data.frame(data.file[8])
+R2_Projected_SL_By_Segmentation<-as.data.frame(data.file[9])
+R2_ROLine<-as.data.frame(data.file[10])
+R2_SOLine<-as.data.frame(data.file[11])
+R2_StorageCost<-as.data.frame(data.file[12])
+R2_TOLine<-as.data.frame(data.file[13])
+
+#Load packages
+
+suppressMessages(library(tidyverse))
+suppressMessages(library(leaflet))
+suppressMessages(library(scales))
+suppressMessages(library(knitr))
+suppressMessages(library(rmarkdown))
+suppressMessages(library(viridis))
+suppressMessages(library(ggsci))
+suppressMessages(library(Amelia))
+suppressMessages(library(lubridate))
+```
+
+# Process the datasets
+
+```{r}
+#First preparation for datasets. Cus will be the main datasets for processing with leaflet package 
+
+Cus<- R2_CustomerMaster
+Cus<-left_join(Cus,R2_OutboundTransportRate,by=c("CusId"="CustomerId"))
+R2_SOLine<- R2_SOLine%>%select(SoCustomerId,SoEnteredDate,SoQuantity,SoUnitCost,SoOrderLineId)
+
+R2_TOLine1<- left_join(R2_TOLine,R2_SOLine,by="SoOrderLineId")%>%select(SoCustomerId,SoEnteredDate,SoUnitCost,ToQuantity,ToArrivalDate)%>%mutate(SoEnteredDate=as.character(SoEnteredDate),ToArrivalDate=as.character(ToArrivalDate))%>%mutate(SoEnteredDate=as.Date(SoEnteredDate,format="%Y-%m-%d"),ToArrivalDate=as.Date(ToArrivalDate,format="%Y-%m-%d"),difftime=as.integer(abs(SoEnteredDate-ToArrivalDate)), Sales=SoUnitCost*ToQuantity,total_time=difftime*ToQuantity)%>%group_by(SoCustomerId)%>%summarise(Sales=sum(Sales),total_time=sum(total_time),ToQuantity=sum(ToQuantity))%>%arrange(desc(Sales))%>%mutate(cum_Sales=cumsum(Sales/sum(Sales)),lead_time=total_time/ToQuantity)%>%mutate(Class=ifelse(cum_Sales<0.8,"A",ifelse(cum_Sales>=0.95,"C","B")))
+
+
+Cus<-left_join(R2_TOLine1,R2_Projected_CoverageDay_By_Class,by=c("Class"="ClassAbc"))%>%select(-c(total_time,cum_Sales,total_time))
+
+Cus<-left_join(Cus,R2_CustomerMaster,by=c("SoCustomerId"="CusId"))
+
+
+
+leaflet(data=Cus)%>%addTiles()%>%addProviderTiles(provider = providers$MtbMap)%>%addProviderTiles(provider = providers$Stamen.TonerLines)%>%addProviderTiles(provider = providers$Stamen.TonerLabels) %>%addMarkers(data=Cus,lng=~Longitude,lat=~Latitude)%>%addPopups(lng =~Cus$Longitude,lat=~Cus$Latitude,popup = paste(Cus$SoCustomerId,"Sales: ",Cus$Sales),options = popupOptions(keepInView = TRUE,closeOnClick = FALSE))
+
+
+
+---
+title: "VN_ecommerce"
+author: NguyenLSCMFTU2
+date: 10/03/2020
+output: html_document
+
+---
+
+# Introduction
+
+This project is intended to compare the number of searching times based on keywords these are `Tiki`, `Sendo`, `Shopee`,`Lazada`, then understand more and more e-commerce users activites within a **week** (7 day)
+
+# Set up the packages and standardize datasets to visualize
+
+## Load packages
+```{r }
+
+suppressMessages(library(tidyverse))
+suppressMessages(library(viridis))
+suppressMessages(library(ggsci))
+suppressMessages(library(lubridate))
+suppressMessages(library(stringr))
+suppressMessages(library(stringi))
+suppressMessages(library(explore))
+suppressMessages(library(DT))
+suppressMessages(library(Amelia))
+suppressMessages(library(gridExtra))
+
+theme_set(theme_minimal())
+
+```
+## Load datasets
+
+These concepts to manipulate datasets are create a list then use the *lapply* to replicate to optimize time process
+
+
+```{r setup}
+
+dataset<- list()
+dataset<- lapply(Sys.glob("*.csv"),read.csv)
+
+"Built function to standardize"
+clean_function <- function(dt) {
+ 
+  dt <- dt %>% mutate(date = as.POSIXct(str_replace_all(date,"T"," "), format = "%Y-%m-%d %H"))
+  }
+dataset<-lapply(dataset, clean_function)
+
+
+
+lazada<-as.data.frame(dataset[1])%>% mutate(hour=factor(hour(date)))%>% mutate(wday=factor(wday(date)))
+sendo<-as.data.frame(dataset[2])%>% mutate(hour=factor(hour(date)))%>% mutate(wday=factor(wday(date)))
+shopee<-as.data.frame(dataset[3])%>% mutate(hour=factor(hour(date)))%>% mutate(wday=factor(wday(date)))
+tiki<-as.data.frame(dataset[4])%>% mutate(hour=factor(hour(date)))%>% mutate(wday=factor(wday(date)))
+
+```
+
+## Let have a look at sample `Lazada` dataset right now
+
+```{r}
+library(knitr)
+knitr::kable(head(lazada))
+
+```
+
+From these table, you can easily see the main components are `time` and `n` (n is the total of searching times in each record (row)) 
+
+I also standardize the datasets and extract the weekdays and hour for these below purposes
+
+##Check NA values
+Once more time, be sure that you are comfortable without NA values
+
+```{r}
+
+#Test na in datasets
+missmap(tiki)
+missmap(lazada)
+missmap(sendo)
+missmap(shopee)
+
+```
+ These result is quite good
+
+#Visualize the datasets
+
+##Histogram in data set 
+
+```{r}
+
+tiki_plot<-tiki%>% ggplot(aes(x=n,y=..density..))+geom_histogram(bins=35,fill="steelblue",col="white")+geom_density(fill="green",alpha=0.3,col="red")+ggtitle(label="Number of Suffering Tiki Website")
+
+lazada_plot<-lazada%>% ggplot(aes(x=n,y=..density..))+geom_histogram(bins=35,fill="steelblue",col="white")+geom_density(fill="green",alpha=0.3,col="red")+ggtitle(label="Number of Suffering lazada Website")
+
+sendo_plot<-sendo%>% ggplot(aes(x=n,y=..density..))+geom_histogram(bins=35,fill="steelblue",col="white")+geom_density(fill="green",alpha=0.3,col="red")+ggtitle(label="Number of Suffering sendo Website")
+
+shopee_plot<-shopee%>% ggplot(aes(x=n,y=..density..))+geom_histogram(bins=35,fill="steelblue",col="white")+geom_density(fill="green",alpha=0.3,col="red")+ggtitle(label="Number of Suffering shopee Website")
+
+              grid.arrange(tiki_plot,sendo_plot,shopee_plot,lazada_plot)
+              
+```
+
+From these plot I can conclude that Shopee has the largest number of searching keyword. But bins are not quite same. Likewise, Lazada frequency clearly separates to 2 parts. Tiki and Sendo are quite same day to day
+
+            
+      
+## Hour vs Weekday
+
+### Tiki
+
+```{r}
+plot1<- tiki%>% group_by(hour)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=total,fill=hour,alpha=0.5))+geom_col()+labs(title="Searching numbers pear hour of tiki",xlabs="Hour",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot2<-tiki%>% group_by(wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=wday,y=total,fill=wday))+geom_col()+labs(title="Searching numbers pear wday of tiki",xlabs="Wday",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot3<- tiki%>%group_by(hour,wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=wday))+geom_tile(aes(fill=total))+scale_fill_viridis(option="A")+labs(title="Searching numbers pear hour vs wday of tiki",xlabs="Hour",ylabs="Wday")
+
+plot4<- tiki%>% ggplot(aes(x=date,y=n))+geom_line(aes(group=1),color="blue",lwd=3)+labs(title="Searching numbers pear hour vs wday of tiki",xlabs="Date",ylabs="Frequency")
+
+            grid.arrange(plot1,plot2,plot3,plot4,nrow=2,ncol=2)
+
+```
+     
+
+### Sendo
+
+```{r }
+plot1<-sendo%>% group_by(hour)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=total,fill=hour,alpha=0.5))+geom_col()+labs(title="Searching numbers pear hour of sendo",xlabs="Hour",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot2<-sendo%>% group_by(wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=wday,y=total,fill=wday))+geom_col()+labs(title="Searching numbers pear wday of sendo",xlabs="Wday",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot3<- sendo%>%group_by(hour,wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=wday))+geom_tile(aes(fill=total))+scale_fill_viridis(option="A")+labs(title="Searching numbers pear hour vs wday of sendo",xlabs="Hour",ylabs="Wday")
+
+plot4<- sendo%>% ggplot(aes(x=date,y=n))+geom_line(aes(group=1),color="blue",lwd=3)+labs(title="Searching numbers pear hour vs wday of sendo",xlabs="Date",ylabs="Frequency")
+
+            grid.arrange(plot1,plot2,plot3,plot4,nrow=2,ncol=2)
+
+            
+```
+            
+### Lazada
+
+```{r}
+plot1<-lazada%>% group_by(hour)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=total,fill=hour,alpha=0.5))+geom_col()+labs(title="Searching numbers pear hour of lazada",xlabs="Hour",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot2<-lazada%>% group_by(wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=wday,y=total,fill=wday))+geom_col()+labs(title="Searching numbers pear wday of lazada",xlabs="Wday",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot3<- lazada%>%group_by(hour,wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=wday))+geom_tile(aes(fill=total))+scale_fill_viridis(option="A")+labs(title="Searching numbers pear hour vs wday of lazada",xlabs="Hour",ylabs="Wday")
+
+plot4<- lazada%>% ggplot(aes(x=date,y=n))+geom_line(aes(group=1),color="blue",lwd=3)+labs(title="Searching numbers pear hour vs wday of lazada",xlabs="Date",ylabs="Frequency")
+
+         grid.arrange(plot1,plot2,plot3,plot4,nrow=2,ncol=2)
+```
+          
+          
+          
+### Shopee
+```{r}
+plot1<-shopee%>% group_by(hour)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=total,fill=hour,alpha=0.5))+geom_col()+labs(title="Searching numbers pear hour of shopee",xlabs="Hour",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot2<-shopee%>% group_by(wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=wday,y=total,fill=wday))+geom_col()+labs(title="Searching numbers pear wday of shopee",xlabs="Wday",ylabs="Frequency")+scale_color_viridis(discrete=TRUE,option="A")
+
+plot3<- shopee%>%group_by(hour,wday)%>%summarise(total=sum(n))%>%ggplot(aes(x=hour,y=wday))+geom_tile(aes(fill=total))+scale_fill_viridis(option="A")+labs(title="Searching numbers pear hour vs wday of shopee",xlabs="Hour",ylabs="Wday")
+
+plot4<- shopee%>%ggplot(aes(x=date,y=n))+geom_line(aes(group=1),color="blue",lwd=3)+labs(title="Searching numbers pear hour vs wday of shopee",xlabs="Date",ylabs="Frequency")
+
+    grid.arrange(plot1,plot2,plot3,plot4,nrow=2,ncol=2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
